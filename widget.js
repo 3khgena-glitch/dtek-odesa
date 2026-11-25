@@ -1,85 +1,153 @@
-// Группу можно указать в параметрах виджета (Parameter) на рабочем столе.
-// Если не указана — по умолчанию берется группа "1".
-const GROUP = args.widgetParameter ? args.widgetParameter.trim() : "1";
 const DATA_URL = "https://raw.githubusercontent.com/3khgena-glitch/dtek-odesa/main/schedule.json";
 const PWA_URL = "https://3khgena-glitch.github.io/dtek-odesa/";
+
+// Парсимо параметр виду "Дім:3; Робота:1; Мама:5" (до 5 адрес)
+const rawParam = args.widgetParameter ? args.widgetParameter.trim() : "Дім:3";
+const items = rawParam
+  .split(";")
+  .map(part => part.trim())
+  .filter(Boolean)
+  .slice(0, 5)
+  .map(part => {
+    const [name, group] = part.split(":").map(s => s.trim());
+    // Якщо ввели просто цифру (наприклад "3"), назвою буде "Група 3"
+    if (!group) return { name: `Група ${name}`, group: name };
+    return { name, group };
+  });
+
+function getStatusInfo(todaySchedule, now) {
+  const currentHour = now.getHours();
+  const currentStatus = todaySchedule[currentHour];
+
+  let label = "Можливо";
+  let shortIcon = "🟡";
+  let bgColor = "#D97706";
+
+  if (currentStatus === "on") {
+    label = "Світло є";
+    shortIcon = "🟢";
+    bgColor = "#16A34A";
+  } else if (currentStatus === "off") {
+    label = "Немає";
+    shortIcon = "🔴";
+    bgColor = "#DC2626";
+  }
+
+  let nextChangeHour = -1;
+  for (let i = currentHour + 1; i < 24; i++) {
+    if (todaySchedule[i] !== currentStatus) {
+      nextChangeHour = i;
+      break;
+    }
+  }
+
+  let timerText = "до кінця доби";
+  if (nextChangeHour !== -1) {
+    const minsLeft = 60 - now.getMinutes();
+    const hoursLeft = nextChangeHour - currentHour - 1;
+    timerText = `до ${nextChangeHour}:00 (${hoursLeft}г ${minsLeft}хв)`;
+  }
+
+  return { label, shortIcon, bgColor, timerText };
+}
 
 async function createWidget() {
   const widget = new ListWidget();
   widget.url = PWA_URL;
-  widget.setPadding(14, 14, 14, 14);
+  widget.setPadding(12, 14, 12, 14);
 
   try {
     const req = new Request(DATA_URL);
     const data = await req.loadJSON();
-    const todaySchedule = data.groups[GROUP];
-
-    if (!todaySchedule) {
-      throw new Error(`Група ${GROUP} не знайдена`);
-    }
-
     const now = new Date();
-    const currentHour = now.getHours();
-    const currentStatus = todaySchedule[currentHour];
+    const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
 
-    // Настройка цветов и текста
-    let statusTitle = "Можливе відкл.";
-    let bgColor = "#D97706"; // желтый/оранжевый
+    if (items.length === 1) {
+      // Режим 1 адреси (кольоровий фон)
+      const item = items[0];
+      const sched = data.groups[item.group];
+      if (!sched) throw new Error(`Група ${item.group} не знайдена`);
 
-    if (currentStatus === "on") {
-      statusTitle = "Світло є";
-      bgColor = "#16A34A"; // зеленый
-    } else if (currentStatus === "off") {
-      statusTitle = "Світла немає";
-      bgColor = "#DC2626"; // красный
-    }
+      const info = getStatusInfo(sched, now);
+      widget.backgroundColor = new Color(info.bgColor);
 
-    widget.backgroundColor = new Color(bgColor);
+      const header = widget.addText(`${item.name} • Гр. ${item.group}`);
+      header.font = Font.semiboldSystemFont(12);
+      header.textColor = new Color("#FFFFFF", 0.85);
+      header.lineLimit = 1;
 
-    // Поиск следующего изменения
-    let nextChangeHour = -1;
-    for (let i = currentHour + 1; i < 24; i++) {
-      if (todaySchedule[i] !== currentStatus) {
-        nextChangeHour = i;
-        break;
+      widget.addSpacer(8);
+
+      const statusEl = widget.addText(info.label);
+      statusEl.font = Font.boldSystemFont(20);
+      statusEl.textColor = Color.white();
+
+      widget.addSpacer(6);
+
+      const timerEl = widget.addText(info.timerText);
+      timerEl.font = Font.mediumSystemFont(12);
+      timerEl.textColor = new Color("#FFFFFF", 0.9);
+
+      widget.addSpacer();
+
+      const updated = widget.addText(`Оновлено: ${timeStr}`);
+      updated.font = Font.systemFont(10);
+      updated.textColor = new Color("#FFFFFF", 0.65);
+
+    } else {
+      // Режим списку (2–5 адрес, темна тема)
+      widget.backgroundColor = new Color("#111827");
+
+      const headerStack = widget.addStack();
+      headerStack.layoutHorizontally();
+      const title = headerStack.addText("Світло • Одеса");
+      title.font = Font.boldSystemFont(13);
+      title.textColor = Color.white();
+      headerStack.addSpacer();
+      const upd = headerStack.addText(timeStr);
+      upd.font = Font.systemFont(11);
+      upd.textColor = new Color("#9CA3AF");
+
+      widget.addSpacer(8);
+
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        const sched = data.groups[item.group];
+
+        const row = widget.addStack();
+        row.layoutHorizontally();
+        row.centerAlignContent();
+
+        if (!sched) {
+          const errTxt = row.addText(`⚪ ${item.name} — помилка гр. ${item.group}`);
+          errTxt.font = Font.systemFont(12);
+          errTxt.textColor = new Color("#9CA3AF");
+        } else {
+          const info = getStatusInfo(sched, now);
+
+          const left = row.addText(`${info.shortIcon} ${item.name} (г.${item.group})`);
+          left.font = Font.semiboldSystemFont(12);
+          left.textColor = Color.white();
+          left.lineLimit = 1;
+
+          row.addSpacer();
+
+          const right = row.addText(info.timerText);
+          right.font = Font.systemFont(11);
+          right.textColor = new Color("#D1D5DB");
+          right.lineLimit = 1;
+        }
+
+        if (i < items.length - 1) widget.addSpacer(5);
       }
+
+      widget.addSpacer();
     }
-
-    let timerText = "До кінця доби без змін";
-    if (nextChangeHour !== -1) {
-      const minsLeft = 60 - now.getMinutes();
-      const hoursLeft = nextChangeHour - currentHour - 1;
-      timerText = `Ще ${hoursLeft}г ${minsLeft}хв (до ${nextChangeHour}:00)`;
-    }
-
-    // Отрисовка
-    const header = widget.addText(`Одеса • Група ${GROUP}`);
-    header.font = Font.semiboldSystemFont(12);
-    header.textColor = new Color("#FFFFFF", 0.85);
-
-    widget.addSpacer(8);
-
-    const statusEl = widget.addText(statusTitle);
-    statusEl.font = Font.boldSystemFont(20);
-    statusEl.textColor = Color.white();
-    statusEl.minimumScaleFactor = 0.7;
-
-    widget.addSpacer(6);
-
-    const timerEl = widget.addText(timerText);
-    timerEl.font = Font.mediumSystemFont(12);
-    timerEl.textColor = new Color("#FFFFFF", 0.9);
-
-    widget.addSpacer();
-
-    const updated = widget.addText(`Оновлено: ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`);
-    updated.font = Font.systemFont(10);
-    updated.textColor = new Color("#FFFFFF", 0.65);
 
   } catch (e) {
     widget.backgroundColor = new Color("#1F2937");
     const errTitle = widget.addText("Помилка");
-    errTitle.font = Font.boldSystemFont(16);
+    errTitle.font = Font.boldSystemFont(15);
     errTitle.textColor = Color.white();
     widget.addSpacer(4);
     const errDesc = widget.addText(e.message || "Немає зв'язку");
@@ -87,10 +155,7 @@ async function createWidget() {
     errDesc.textColor = new Color("#9CA3AF");
   }
 
-  // Просим iOS обновить виджет через 15 минут
-  const nextRefresh = new Date(Date.now() + 15 * 60 * 1000);
-  widget.refreshAfterDate = nextRefresh;
-
+  widget.refreshAfterDate = new Date(Date.now() + 15 * 60 * 1000);
   return widget;
 }
 
@@ -99,6 +164,10 @@ const widget = await createWidget();
 if (config.runsInWidget) {
   Script.setWidget(widget);
 } else {
-  await widget.presentSmall();
+  if (items.length > 1) {
+    await widget.presentMedium();
+  } else {
+    await widget.presentSmall();
+  }
 }
 Script.complete();
