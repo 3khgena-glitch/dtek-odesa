@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Світло Одеса</title>
+    
+    <!-- Настройки для iOS PWA -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Світло">
+    <link rel="apple-touch-icon" href="icon.png"> <!-- Добавь любую картинку icon.png 192x192 в корень -->
+    
+    <link rel="manifest" href="manifest.json">
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-white font-sans h-screen flex flex-col items-center justify-center p-4">
+
+    <div class="w-full max-w-md bg-gray-800 rounded-2xl shadow-lg p-6 flex flex-col items-center">
+        <h1 class="text-2xl font-bold mb-4">Графік відключень (Одеса)</h1>
+        
+        <label for="group-select" class="text-gray-400 mb-2">Обери свою групу (1-6):</label>
+        <select id="group-select" class="w-full bg-gray-700 text-white rounded-lg p-3 mb-6 focus:outline-none">
+            <option value="1">Група 1</option>
+            <option value="2">Група 2</option>
+            <option value="3">Група 3</option>
+            <option value="4">Група 4</option>
+            <option value="5">Група 5</option>
+            <option value="6">Група 6</option>
+        </select>
+
+        <div id="status-card" class="w-full rounded-xl p-6 text-center mb-6 bg-gray-700">
+            <p id="status-text" class="text-3xl font-bold mb-2">Завантаження...</p>
+            <p id="timer-text" class="text-gray-300 text-sm">Рахуємо час...</p>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js');
+        }
+    </script>
+</body>
+</html>
